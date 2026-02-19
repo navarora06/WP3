@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Gap Report #{{ report.id }}</h2>
+<p>Status: <span class="badge">{{ report.status.value }}</span></p>
+<p>Created: {{ report.created_at }} by user {{ report.created_by }}</p>
+<p>Interview ID: {{ report.interview_id }}</p>
+<p>Docs: {{ report.support_doc_ids_json }}</p>
+
+{% if report.summary_json %}
+  <h3>Summary</h3>
+  <pre>{{ report.summary_json }}</pre>
+{% endif %}
+
+{% if report.pdf_path %}
+  <p>PDF saved at: {{ report.pdf_path }}</p>
+{% endif %}
+
+<h3>Items</h3>
+<table>
+  <tr><th>Label</th><th>Confidence</th><th>Claim</th><th>Rationale</th></tr>
+  {% for it in items %}
+  <tr>
+    <td>{{ it.label.value }}</td>
+    <td>{{ "%.2f"|format(it.confidence) }}</td>
+    <td>{{ it.claim_text }}</td>
+    <td>{{ it.rationale }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<p><em>If status is RUNNING, refresh this page until READY.</em></p>
+{% endblock %}

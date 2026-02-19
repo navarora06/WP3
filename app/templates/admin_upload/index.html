@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="row g-4">
+  <div class="col-12">
+    <h2 class="fw-bold">Admin upload</h2>
+    <p class="text-muted mb-0">Upload interview audio and supporting documents. Processing runs in background.</p>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title">Upload interview audio</h5>
+
+        <form method="post" action="/admin/upload/audio" enctype="multipart/form-data" class="mt-3">
+          {{ audio_form.csrf_token }}
+
+          <div class="mb-3">
+            {{ audio_form.title.label(class="form-label") }}
+            {{ audio_form.title(class="form-control") }}
+          </div>
+
+          <div class="mb-3">
+            {{ audio_form.company_domain.label(class="form-label") }}
+            {{ audio_form.company_domain(class="form-control") }}
+          </div>
+
+          <div class="form-check mb-3">
+            {{ audio_form.is_finnish(class="form-check-input") }}
+            {{ audio_form.is_finnish.label(class="form-check-label") }}
+            <div class="form-text">If unchecked, we assume the transcript is already English.</div>
+          </div>
+
+          <div class="mb-3">
+            {{ audio_form.audio.label(class="form-label") }}
+            {{ audio_form.audio(class="form-control") }}
+          </div>
+
+          <button type="submit" class="btn btn-primary">Upload &amp; Process</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title">Upload supporting document</h5>
+
+        <form method="post" action="/admin/upload/doc" enctype="multipart/form-data" class="mt-3">
+          {{ doc_form.csrf_token }}
+
+          <div class="mb-3">
+            {{ doc_form.title.label(class="form-label") }}
+            {{ doc_form.title(class="form-control") }}
+          </div>
+
+          <div class="form-check mb-3">
+            {{ doc_form.is_finnish(class="form-check-input") }}
+            {{ doc_form.is_finnish.label(class="form-check-label") }}
+            <div class="form-text">If unchecked, we store as English without translating.</div>
+          </div>
+
+          <div class="mb-3">
+            {{ doc_form.doc.label(class="form-label") }}
+            {{ doc_form.doc(class="form-control") }}
+          </div>
+
+          <button type="submit" class="btn btn-primary">Upload &amp; Process</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

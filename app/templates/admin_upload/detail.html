@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Interview #{{ interview.id }} — {{ interview.title }}</h2>
+<p>Status: <span class="badge">{{ interview.status.value }}</span></p>
+<p>Domain: {{ interview.company_domain }}</p>
+<p>Audio: {{ interview.audio_file_path }}</p>
+<p>Refresh this page until status becomes READY.</p>
+{% endblock %}

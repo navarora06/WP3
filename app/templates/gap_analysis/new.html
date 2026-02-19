@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <h1 class="text-4xl font-bold mb-8">New knowledge gap analysis</h1>
+
+  <form method="post" action="/gap/run" id="gapForm" class="space-y-6">
+    <div>
+      <label class="block text-sm font-medium mb-2">Select interview</label>
+      <select name="interview_id" class="w-full border rounded p-2" required>
+        <option value="" disabled selected>Select interview…</option>
+        {% for i in interviews %}
+          <option value="{{ i.id }}">{{ i.title }} ({{ i.status }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-2">Select supporting doc</label>
+      <select name="doc_id" class="w-full border rounded p-2" required>
+        <option value="" disabled selected>Select supporting doc…</option>
+        {% for d in docs %}
+          <option value="{{ d.id }}">{{ d.title }} ({{ d.status }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white">
+      Run Gap Analysis
+    </button>
+  </form>
+</div>
+
+<!-- Loading overlay -->
+<div id="loadingOverlay" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center">
+  <div class="bg-white rounded-lg p-6 w-96 shadow">
+    <div class="flex items-center gap-3">
+      <div class="animate-spin h-5 w-5 border-2 border-gray-300 border-t-gray-800 rounded-full"></div>
+      <div class="font-medium">Running analysis…</div>
+    </div>
+    <div class="text-sm text-gray-600 mt-2">
+      Extracting claims, matching evidence, generating report…
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById("gapForm").addEventListener("submit", function() {
+    document.getElementById("loadingOverlay").classList.remove("hidden");
+  });
+</script>
+{% endblock %}

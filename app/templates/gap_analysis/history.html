@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-4xl mx-auto">
+  <h1 class="text-3xl font-bold mb-6">Gap history</h1>
+
+  <div class="bg-white rounded shadow overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="text-left p-3">Report ID</th>
+          <th class="text-left p-3">Interview</th>
+          <th class="text-left p-3">Doc</th>
+          <th class="text-left p-3">Created</th>
+          <th class="text-left p-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in reports %}
+        <tr class="border-t">
+          <td class="p-3">{{ r.id }}</td>
+          <td class="p-3">{{ r.interview_id }}</td>
+          <td class="p-3">{{ r.doc_id }}</td>
+          <td class="p-3">{{ r.created_at }}</td>
+          <td class="p-3 space-x-2">
+            <a class="underline" href="/gap/report/{{ r.id }}">View</a>
+            <a class="underline" href="/gap/download/{{ r.id }}">Download</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

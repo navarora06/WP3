@@ -1,0 +1,45 @@
+{% block content %}
+<div class="max-w-6xl mx-auto">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-3xl font-bold">Knowledge Gap Analysis Report</h1>
+    <a class="px-4 py-2 rounded border" href="/gap/download/{{ rpt.id }}">Download</a>
+  </div>
+
+  <div class="overflow-x-auto bg-white rounded shadow">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="text-left p-3">Claim</th>
+          <th class="text-left p-3">Label</th>
+          <th class="text-left p-3">Interview Evidence</th>
+          <th class="text-left p-3">Doc Evidence</th>
+          <th class="text-left p-3">Confidence</th>
+          <th class="text-left p-3">Action</th>
+          <th class="text-left p-3">Action Suggestion</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr class="border-t">
+          <td class="p-3">{{ r.claim }}</td>
+          <td class="p-3">
+            {% if r.label == "SUPPORTED" %}
+              <span class="px-2 py-1 rounded bg-green-600 text-white text-xs">SUPPORTED</span>
+            {% elif r.label == "CONTRADICTED" %}
+              <span class="px-2 py-1 rounded bg-red-600 text-white text-xs">CONTRADICTED</span>
+            {% else %}
+              <span class="px-2 py-1 rounded bg-gray-600 text-white text-xs">UNKNOWN</span>
+            {% endif %}
+          </td>
+          <td class="p-3 whitespace-pre-line">{{ r.interview_evidence }}</td>
+          <td class="p-3 whitespace-pre-line">{{ r.doc_evidence }}</td>
+          <td class="p-3">{{ r.confidence }}</td>
+          <td class="p-3">{{ r.action }}</td>
+          <td class="p-3">{{ r.suggestion }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

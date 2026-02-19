@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="fw-bold">Your uploads</h2>
+<p class="text-muted">Only items uploaded by you are shown here. You can delete your uploads.</p>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title">Interviews</h5>
+
+        <div class="table-responsive mt-3">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Finnish?</th>
+                <th>Created</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for i in interviews %}
+              <tr>
+                <td>{{ i.id }}</td>
+                <td><a href="/admin/interview/{{ i.id }}">{{ i.title }}</a></td>
+                <td><span class="badge text-bg-secondary">{{ i.status.value }}</span></td>
+                <td>{{ "Yes" if i.is_finnish else "No" }}</td>
+                <td class="text-muted">{{ i.created_at }}</td>
+                <td class="text-end">
+                  <form method="post" action="/admin/delete/interview/{{ i.id }}" onsubmit="return confirm('Delete this interview?');">
+                    <button class="btn btn-outline-danger btn-sm">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+              {% if interviews|length == 0 %}
+              <tr><td colspan="6" class="text-muted">No interviews uploaded yet.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title">Supporting documents</h5>
+
+        <div class="table-responsive mt-3">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Finnish?</th>
+                <th>Created</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for d in docs %}
+              <tr>
+                <td>{{ d.id }}</td>
+                <td>{{ d.title }}</td>
+                <td><span class="badge text-bg-secondary">{{ d.status.value }}</span></td>
+                <td>{{ "Yes" if d.is_finnish else "No" }}</td>
+                <td class="text-muted">{{ d.created_at }}</td>
+                <td class="text-end">
+                  <form method="post" action="/admin/delete/doc/{{ d.id }}" onsubmit="return confirm('Delete this document?');">
+                    <button class="btn btn-outline-danger btn-sm">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+              {% if docs|length == 0 %}
+              <tr><td colspan="6" class="text-muted">No documents uploaded yet.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
