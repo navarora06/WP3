@@ -24,3 +24,8 @@ accelerate==0.34.2
 huggingface-hub==0.24.7
 safetensors==0.4.5
 
+pymupdf
+python-docx
+beautifulsoup4
+lxml
+
