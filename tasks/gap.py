@@ -1,35 +1,35 @@
 import os
+import json
+import logging
+
 from tasks import celery_app
 from app.config import Config
 from app.extensions import init_db
-from app.models import GapReport, GapItem, GapStatus, GapLabel, InterviewText, SupportDoc
+from app.models import GapReport, GapItem, GapLabel, InterviewText, SupportDoc, Status
 from app.util import db_session
-from tasks.lightrag_client import lightrag_query
-from tasks.pdf import render_gap_report_pdf
+from app.storage_backend import StorageBackend
+from tasks.azure_agent import run_gap_analysis_agent
+from tasks.report_excel import generate_gap_report_excel
 
-def extract_claims_from_transcript(transcript_en: str, max_claims: int = 15):
-    sentences = [s.strip() for s in transcript_en.split(".") if s.strip()]
-    return [{"text": s + ".", "refs": {}} for s in sentences[:max_claims]]
+log = logging.getLogger(__name__)
 
-def classify_claim_with_evidence(claim: str, evidence: list[dict]):
-    if not evidence:
-        return GapLabel.UNKNOWN, 0.2, "No supporting evidence retrieved.", {"evidence": []}
-    ev_text = " ".join([e.get("text", "") for e in evidence]).lower()
-    overlap = sum(1 for w in claim.lower().split() if w in ev_text)
-    if overlap > 3:
-        return GapLabel.SUPPORTED, 0.6, "Evidence appears to support the claim (heuristic).", {"evidence": evidence}
-    return GapLabel.UNKNOWN, 0.4, "Evidence retrieved but not clearly supporting (heuristic).", {"evidence": evidence}
 
 @celery_app.task
 def gap_analysis_task(report_id: int):
+    """Run NLI gap analysis using Azure OpenAI agent, save results, generate Excel."""
     cfg = Config()
     init_db(cfg.DATABASE_URL)
+    storage = StorageBackend(cfg.STORAGE_ROOT)
 
     with db_session() as db:
         report = db.get(GapReport, report_id)
-        report.status = GapStatus.RUNNING
+        if not report:
+            log.error("GapReport %s not found", report_id)
+            return
+        report.status = Status.PROCESSING
+
         interview_id = report.interview_id
-        doc_ids = report.support_doc_ids_json.get("doc_ids", [])
+        doc_id = report.doc_id
 
         itext = (
             db.query(InterviewText)
@@ -37,71 +37,86 @@ def gap_analysis_task(report_id: int):
             .order_by(InterviewText.created_at.desc())
             .first()
         )
-        docs = db.query(SupportDoc).filter(SupportDoc.id.in_(doc_ids)).all()
+        doc = db.get(SupportDoc, doc_id)
 
         transcript_en = (itext.transcript_en or "").strip() if itext else ""
-        _ = {d.id: (d.extracted_text_en or "") for d in docs}
+        segments_json = (itext.segments_json or {}).get("segments", []) if itext else []
+        doc_title = doc.title if doc else "Unknown"
+        doc_text = (doc.extracted_text_en or "").strip() if doc else ""
 
-    claims = extract_claims_from_transcript(transcript_en, max_claims=20)
+    if not transcript_en or not doc_text:
+        log.warning("Report %s: empty transcript or doc text", report_id)
+        with db_session() as db:
+            report = db.get(GapReport, report_id)
+            if report:
+                report.status = Status.FAILED
+                report.summary_json = {"error": "Empty transcript or document text"}
+        return
 
-    supported = contradicted = unknown = 0
-    stored_items = []
+    try:
+        log.info("Running gap analysis agent for report %s", report_id)
+        result = run_gap_analysis_agent(transcript_en, segments_json, doc_title, doc_text)
 
-    for c in claims:
-        claim_text = c["text"]
-        res = lightrag_query(query=claim_text, filters={"doc_ids": doc_ids}, top_k=5)
-        evidence = res.get("results", [])
+        gap_items = result.get("gap_analysis", [])
+        out_of_scope = result.get("out_of_scope", [])
 
-        label, conf, rationale, ev_json = classify_claim_with_evidence(claim_text, evidence)
+        supported = sum(1 for i in gap_items if i.get("label") == "SUPPORTED")
+        contradicted = sum(1 for i in gap_items if i.get("label") == "CONTRADICTED")
+        unknown = sum(1 for i in gap_items if i.get("label") == "UNKNOWN")
+        summary = {
+            "total_claims": len(gap_items),
+            "supported": supported,
+            "contradicted": contradicted,
+            "unknown": unknown,
+            "out_of_scope_filtered": len(out_of_scope),
+        }
 
-        if label == GapLabel.SUPPORTED:
-            supported += 1
-        elif label == GapLabel.CONTRADICTED:
-            contradicted += 1
-        else:
-            unknown += 1
+        report_data = {
+            "gap_analysis": gap_items,
+            "out_of_scope": out_of_scope,
+            "summary": summary,
+        }
 
-        stored_items.append({
-            "claim": claim_text,
-            "label": label.value,
-            "confidence": conf,
-            "rationale": rationale,
-            "claim_refs": c.get("refs", {}),
-            "doc_evidence": ev_json,
-        })
+        excel_key = f"reports/gap_report_{report_id}.xlsx"
+        excel_path = storage.resolve_path(excel_key)
+        os.makedirs(os.path.dirname(excel_path), exist_ok=True)
+        generate_gap_report_excel(excel_path, report_data, report_id)
 
-    summary = {
-        "total_claims": len(stored_items),
-        "supported": supported,
-        "contradicted": contradicted,
-        "unknown": unknown,
-    }
+        with db_session() as db:
+            report = db.get(GapReport, report_id)
+            if not report:
+                return
 
-    with db_session() as db:
-        report = db.get(GapReport, report_id)
+            db.query(GapItem).filter(GapItem.report_id == report_id).delete()
 
-        db.query(GapItem).filter(GapItem.report_id == report_id).delete()
+            for item in gap_items:
+                label_str = item.get("label", "UNKNOWN").upper()
+                try:
+                    label = GapLabel(label_str)
+                except ValueError:
+                    label = GapLabel.UNKNOWN
 
-        for it in stored_items:
-            db.add(GapItem(
-                report_id=report_id,
-                claim_text=it["claim"],
-                claim_refs_json=it["claim_refs"],
-                label=GapLabel(it["label"]),
-                confidence=float(it["confidence"]),
-                rationale=it["rationale"],
-                doc_evidence_json=it["doc_evidence"],
-            ))
+                db.add(GapItem(
+                    report_id=report_id,
+                    claim_text=item.get("claim", ""),
+                    label=label,
+                    interview_evidence=item.get("interview_evidence", ""),
+                    doc_evidence=item.get("doc_evidence", ""),
+                    confidence=item.get("confidence", "Low"),
+                    action_suggestion=item.get("action_suggestion", ""),
+                ))
 
-        report.summary_json = summary
+            report.report_json = report_data
+            report.summary_json = summary
+            report.report_storage_key = excel_key
+            report.status = Status.READY
 
-        pdf_name = f"gap_report_{report_id}.pdf"
-        pdf_path = os.path.join(cfg.STORAGE_ROOT, "reports", pdf_name)
-        render_gap_report_pdf(
-            output_path=pdf_path,
-            title=f"Knowledge Gap Report #{report_id}",
-            summary=summary,
-            items=stored_items,
-        )
-        report.pdf_path = pdf_path
-        report.status = GapStatus.READY
+        log.info("Report %s ready (%d claims, %d out-of-scope)",
+                 report_id, len(gap_items), len(out_of_scope))
+
+    except Exception:
+        log.exception("Gap analysis failed for report %s", report_id)
+        with db_session() as db:
+            report = db.get(GapReport, report_id)
+            if report:
+                report.status = Status.FAILED

@@ -16,16 +16,11 @@ python-dotenv==1.0.1
 reportlab==4.2.2
 email-validator==2.2.0
 
-faster-whisper==1.1.0
-transformers==4.45.2
-torch==2.4.1
-sentencepiece==0.2.0
-accelerate==0.34.2
-huggingface-hub==0.24.7
-safetensors==0.4.5
+openai
+azure-cognitiveservices-speech
+openpyxl
 
 pymupdf
 python-docx
 beautifulsoup4
 lxml
-

@@ -1,34 +1,63 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="max-w-4xl mx-auto">
-  <h1 class="text-3xl font-bold mb-6">Gap history</h1>
+<div class="container">
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <h1>Gap Analysis History</h1>
+    <a class="btn btn-primary" href="{{ url_for('gap.new_gap') }}">New Analysis</a>
+  </div>
 
-  <div class="bg-white rounded shadow overflow-x-auto">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-50">
+  {% if reports %}
+  <div class="table-responsive">
+    <table class="table table-striped table-hover">
+      <thead class="table-dark">
         <tr>
-          <th class="text-left p-3">Report ID</th>
-          <th class="text-left p-3">Interview</th>
-          <th class="text-left p-3">Doc</th>
-          <th class="text-left p-3">Created</th>
-          <th class="text-left p-3">Actions</th>
+          <th>#</th>
+          <th>Interview</th>
+          <th>Document</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
-      {% for r in reports %}
-        <tr class="border-t">
-          <td class="p-3">{{ r.id }}</td>
-          <td class="p-3">{{ r.interview_id }}</td>
-          <td class="p-3">{{ r.doc_id }}</td>
-          <td class="p-3">{{ r.created_at }}</td>
-          <td class="p-3 space-x-2">
-            <a class="underline" href="/gap/report/{{ r.id }}">View</a>
-            <a class="underline" href="/gap/download/{{ r.id }}">Download</a>
+        {% for r in reports %}
+        <tr>
+          <td>{{ r.id }}</td>
+          <td title="{{ interview_map.get(r.interview_id, '') }}">
+            {{ interview_map.get(r.interview_id, r.interview_id)|string|truncate(20, True, '…') }}
+          </td>
+          <td title="{{ doc_map.get(r.doc_id, '') }}">
+            {{ doc_map.get(r.doc_id, r.doc_id)|string|truncate(20, True, '…') }}
+          </td>
+          <td>
+            {% if r.status.value == "READY" %}
+              <span class="badge bg-success">READY</span>
+            {% elif r.status.value == "PROCESSING" %}
+              <span class="badge bg-warning text-dark">PROCESSING</span>
+            {% elif r.status.value == "FAILED" %}
+              <span class="badge bg-danger">FAILED</span>
+            {% else %}
+              <span class="badge bg-secondary">{{ r.status.value }}</span>
+            {% endif %}
+          </td>
+          <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>
+            {% if r.status.value == "READY" %}
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('gap.view_report', report_id=r.id) }}">View</a>
+              <a class="btn btn-sm btn-outline-success" href="{{ url_for('gap.download_report', report_id=r.id) }}">Excel</a>
+            {% elif r.status.value == "PROCESSING" %}
+              <span class="text-muted">Processing…</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
           </td>
         </tr>
-      {% endfor %}
+        {% endfor %}
       </tbody>
     </table>
   </div>
+  {% else %}
+  <p class="text-muted">No gap analysis reports yet.</p>
+  {% endif %}
 </div>
 {% endblock %}

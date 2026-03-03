@@ -1,46 +1,100 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="max-w-6xl mx-auto">
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-3xl font-bold">Knowledge Gap Analysis Report</h1>
-    <a class="px-4 py-2 rounded border" href="/gap/download/{{ rpt.id }}">Download</a>
+<div class="container">
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <h1>Knowledge Gap Analysis Report #{{ rpt.id }}</h1>
+    <div>
+      <a class="btn btn-outline-success" href="{{ url_for('gap.download_report', report_id=rpt.id) }}">Download Excel</a>
+      <a class="btn btn-outline-secondary ms-2" href="{{ url_for('gap.new_gap') }}">Back</a>
+    </div>
   </div>
 
-  <div class="overflow-x-auto bg-white rounded shadow">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-50">
+  <!-- Summary -->
+  {% if summary %}
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header fw-semibold">Summary</div>
+        <div class="card-body">
+          <table class="table table-sm mb-0">
+            <tr><td>Total claims</td><td class="text-end fw-bold">{{ summary.get('total_claims', 0) }}</td></tr>
+            <tr><td>Supported</td><td class="text-end"><span class="badge bg-success">{{ summary.get('supported', 0) }}</span></td></tr>
+            <tr><td>Contradicted</td><td class="text-end"><span class="badge bg-danger">{{ summary.get('contradicted', 0) }}</span></td></tr>
+            <tr><td>Unknown</td><td class="text-end"><span class="badge bg-warning text-dark">{{ summary.get('unknown', 0) }}</span></td></tr>
+            <tr><td>Out-of-scope filtered</td><td class="text-end">{{ summary.get('out_of_scope_filtered', 0) }}</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Gap Analysis Table -->
+  <h4 class="mb-3">Claims Analysis</h4>
+  <div class="table-responsive mb-5">
+    <table class="table table-bordered table-hover">
+      <thead class="table-dark">
         <tr>
-          <th class="text-left p-3">Claim</th>
-          <th class="text-left p-3">Label</th>
-          <th class="text-left p-3">Interview Evidence</th>
-          <th class="text-left p-3">Doc Evidence</th>
-          <th class="text-left p-3">Confidence</th>
-          <th class="text-left p-3">Action</th>
-          <th class="text-left p-3">Action Suggestion</th>
+          <th style="width:20%">Claim</th>
+          <th style="width:10%">Label</th>
+          <th style="width:20%">Interview Evidence</th>
+          <th style="width:20%">Doc Evidence</th>
+          <th style="width:8%">Confidence</th>
+          <th style="width:5%">Action</th>
+          <th style="width:17%">Action Suggestion</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
-        <tr class="border-t">
-          <td class="p-3">{{ r.claim }}</td>
-          <td class="p-3">
+        <tr>
+          <td>{{ r.claim }}</td>
+          <td class="text-center">
             {% if r.label == "SUPPORTED" %}
-              <span class="px-2 py-1 rounded bg-green-600 text-white text-xs">SUPPORTED</span>
+              <span class="badge bg-success">SUPPORTED</span>
             {% elif r.label == "CONTRADICTED" %}
-              <span class="px-2 py-1 rounded bg-red-600 text-white text-xs">CONTRADICTED</span>
+              <span class="badge bg-danger">CONTRADICTED</span>
             {% else %}
-              <span class="px-2 py-1 rounded bg-gray-600 text-white text-xs">UNKNOWN</span>
+              <span class="badge bg-warning text-dark">UNKNOWN</span>
             {% endif %}
           </td>
-          <td class="p-3 whitespace-pre-line">{{ r.interview_evidence }}</td>
-          <td class="p-3 whitespace-pre-line">{{ r.doc_evidence }}</td>
-          <td class="p-3">{{ r.confidence }}</td>
-          <td class="p-3">{{ r.action }}</td>
-          <td class="p-3">{{ r.suggestion }}</td>
+          <td class="small" style="white-space:pre-line">{{ r.interview_evidence }}</td>
+          <td class="small" style="white-space:pre-line">{{ r.doc_evidence }}</td>
+          <td class="text-center">
+            {% if r.confidence == "High" %}
+              <span class="text-success fw-bold">High</span>
+            {% elif r.confidence == "Medium" %}
+              <span class="text-warning fw-bold">Medium</span>
+            {% else %}
+              <span class="text-secondary fw-bold">Low</span>
+            {% endif %}
+          </td>
+          <td>{{ r.action }}</td>
+          <td class="small">{{ r.suggestion }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+
+  <!-- Out of Scope -->
+  {% if out_of_scope %}
+  <h4 class="mb-3">Out-of-Scope Sentences ({{ out_of_scope|length }})</h4>
+  <div class="card mb-4">
+    <div class="card-body" style="max-height:300px;overflow-y:auto">
+      <ul class="list-group list-group-flush">
+        {% for item in out_of_scope %}
+        <li class="list-group-item small">
+          {% if item is mapping %}
+            {{ item.sentence }}
+            <span class="text-muted">({{ item.reason }})</span>
+          {% else %}
+            {{ item }}
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

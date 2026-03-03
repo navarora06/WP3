@@ -11,7 +11,7 @@ from app.admin_upload.services import audit
 from app.models import Interview, SupportDoc, InterviewText, Status
 from app.util import db_session, text_to_pdf_bytes, safe_filename
 
-from tasks.ingest import ingest_audio_task, ingest_doc_task
+from tasks.ingest import ingest_audio_task, ingest_doc_task, extract_doc_text
 
 
 bp = Blueprint("admin_upload", __name__, url_prefix="/admin")
@@ -129,7 +129,6 @@ def upload_doc():
         db.add(doc)
         db.flush()
 
-        # Save original upload
         key = f"uploads/docs/{doc.id}/original_{safe}"
         current_app.storage.save_upload(key, fs)
         doc.file_storage_key = key
@@ -143,17 +142,10 @@ def upload_doc():
             {"title": doc.title, "is_finnish": doc.is_finnish, "doc_key": key},
         )
 
-        # English docs: extract now and mark READY
         if not doc.is_finnish:
-            from tasks.ingest import extract_doc_text  # MVP reuse
-
             file_path = current_app.storage.resolve_path(doc.file_storage_key)
             extracted_text = extract_doc_text(file_path).strip()
-
-            text_key = f"uploads/docs/{doc.id}/text_en.txt"
-            current_app.storage.save_text(text_key, extracted_text)
-
-            doc.extracted_text_en_storage_key = text_key
+            doc.extracted_text_en = extracted_text
             doc.status = Status.READY
 
             audit(
@@ -162,7 +154,7 @@ def upload_doc():
                 "DOC_READY",
                 "SUPPORT_DOC",
                 doc.id,
-                {"text_key": text_key, "status": "READY"},
+                {"status": "READY"},
             )
         else:
             ingest_doc_task.delay(doc.id)
@@ -185,25 +177,11 @@ def delete_interview(interview_id: int):
         if interview.created_by != uid:
             abort(403)
 
-        # delete stored audio file
         try:
             if interview.audio_storage_key:
                 path = current_app.storage.resolve_path(interview.audio_storage_key)
                 if os.path.exists(path):
                     os.remove(path)
-        except Exception:
-            pass
-
-        # delete transcript artifacts if any
-        try:
-            t = (db.query(InterviewText)
-                 .filter(InterviewText.interview_id == interview_id)
-                 .order_by(InterviewText.created_at.desc())
-                 .first())
-            if t and getattr(t, "transcript_en_storage_key", None):
-                tpath = current_app.storage.resolve_path(t.transcript_en_storage_key)
-                if os.path.exists(tpath):
-                    os.remove(tpath)
         except Exception:
             pass
 
@@ -227,21 +205,11 @@ def delete_doc(doc_id: int):
         if doc.created_by != uid:
             abort(403)
 
-        # delete original doc file
         try:
             if doc.file_storage_key:
                 path = current_app.storage.resolve_path(doc.file_storage_key)
                 if os.path.exists(path):
                     os.remove(path)
-        except Exception:
-            pass
-
-        # delete extracted text file
-        try:
-            if doc.extracted_text_en_storage_key:
-                tpath = current_app.storage.resolve_path(doc.extracted_text_en_storage_key)
-                if os.path.exists(tpath):
-                    os.remove(tpath)
         except Exception:
             pass
 
@@ -287,6 +255,9 @@ def download_interview_transcript(interview_id: int):
 @bp.get("/download/doc/<int:doc_id>/pdf")
 @login_required
 def download_doc_pdf(doc_id: int):
+    """English docs: serve original file (preserves formatting/images).
+    Finnish docs: serve PDF generated from translated English text.
+    """
     uid = int(current_user.get_id())
 
     with db_session() as db:
@@ -295,23 +266,40 @@ def download_doc_pdf(doc_id: int):
             abort(404)
 
         title = doc.title
-        key = doc.extracted_text_en_storage_key
-        if not key:
-            abort(404)
+        is_finnish = doc.is_finnish
+        file_key = doc.file_storage_key
+        translated_text = doc.extracted_text_en or ""
 
-    path = current_app.storage.resolve_path(key)
-    if not os.path.exists(path):
+    if is_finnish:
+        if not translated_text:
+            abort(404)
+        pdf_bytes = text_to_pdf_bytes(f"{title} (EN)", translated_text)
+        bio = BytesIO(pdf_bytes)
+        bio.seek(0)
+        filename = safe_filename(title) + "_en.pdf"
+        return send_file(bio, as_attachment=True, download_name=filename, mimetype="application/pdf")
+
+    if not file_key:
         abort(404)
 
-    with open(path, "r", encoding="utf-8") as f:
-        text = f.read()
+    file_path = current_app.storage.resolve_path(file_key)
+    if not os.path.exists(file_path):
+        abort(404)
 
-    pdf_bytes = text_to_pdf_bytes(f"{title} (EN)", text)
-    bio = BytesIO(pdf_bytes)
-    bio.seek(0)
+    ext = os.path.splitext(file_path)[1].lower()
+    mime_map = {
+        ".pdf": "application/pdf",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".doc": "application/msword",
+        ".txt": "text/plain",
+        ".html": "text/html",
+        ".htm": "text/html",
+        ".md": "text/markdown",
+    }
+    mimetype = mime_map.get(ext, "application/octet-stream")
+    download_name = safe_filename(title) + ext
 
-    filename = safe_filename(title) + "_en.pdf"
-    return send_file(bio, as_attachment=True, download_name=filename, mimetype="application/pdf")
+    return send_file(file_path, as_attachment=True, download_name=download_name, mimetype=mimetype)
 
 
 @bp.get("/history/interview/<int:interview_id>/view")
@@ -350,17 +338,7 @@ def view_doc_text(doc_id: int):
         if not doc or doc.created_by != uid:
             abort(404)
 
-        key = doc.extracted_text_en_storage_key
-        if not key:
-            text = ""
-        else:
-            path = current_app.storage.resolve_path(key)
-            if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    text = f.read()
-            else:
-                text = ""
-
+        text = doc.extracted_text_en or ""
         title = doc.title
 
     return render_template(

@@ -1,51 +1,114 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="max-w-3xl mx-auto">
-  <h1 class="text-4xl font-bold mb-8">New knowledge gap analysis</h1>
+<div class="container">
+  <h1 class="mb-4">Knowledge Gap Analysis</h1>
 
-  <form method="post" action="/gap/run" id="gapForm" class="space-y-6">
-    <div>
-      <label class="block text-sm font-medium mb-2">Select interview</label>
-      <select name="interview_id" class="w-full border rounded p-2" required>
-        <option value="" disabled selected>Select interview…</option>
-        {% for i in interviews %}
-          <option value="{{ i.id }}">{{ i.title }} ({{ i.status }})</option>
-        {% endfor %}
-      </select>
+  <div class="card mb-5">
+    <div class="card-body">
+      <h5 class="card-title">Run New Analysis</h5>
+      <form method="post" action="{{ url_for('gap.run_gap') }}" id="gapForm">
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Select Interview</label>
+          <select name="interview_id" class="form-select" required>
+            <option value="" disabled selected>Select interview…</option>
+            {% for i in interviews %}
+              <option value="{{ i.id }}">{{ i.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Select Supporting Document</label>
+          <select name="doc_id" class="form-select" required>
+            <option value="" disabled selected>Select supporting doc…</option>
+            {% for d in docs %}
+              <option value="{{ d.id }}">{{ d.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="runBtn">
+          Run Gap Analysis
+        </button>
+      </form>
     </div>
+  </div>
 
-    <div>
-      <label class="block text-sm font-medium mb-2">Select supporting doc</label>
-      <select name="doc_id" class="w-full border rounded p-2" required>
-        <option value="" disabled selected>Select supporting doc…</option>
-        {% for d in docs %}
-          <option value="{{ d.id }}">{{ d.title }} ({{ d.status }})</option>
+  <!-- Report History -->
+  <h4 class="mb-3">Analysis History</h4>
+
+  {% if reports %}
+  <div class="table-responsive">
+    <table class="table table-striped table-hover">
+      <thead class="table-dark">
+        <tr>
+          <th>#</th>
+          <th>Interview</th>
+          <th>Document</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reports %}
+        <tr>
+          <td>{{ r.id }}</td>
+          <td title="{{ interview_map.get(r.interview_id, '') }}">
+            {{ interview_map.get(r.interview_id, r.interview_id)|string|truncate(20, True, '…') }}
+          </td>
+          <td title="{{ doc_map.get(r.doc_id, '') }}">
+            {{ doc_map.get(r.doc_id, r.doc_id)|string|truncate(20, True, '…') }}
+          </td>
+          <td>
+            {% if r.status.value == "READY" %}
+              <span class="badge bg-success">READY</span>
+            {% elif r.status.value == "PROCESSING" %}
+              <span class="badge bg-warning text-dark">PROCESSING</span>
+            {% elif r.status.value == "FAILED" %}
+              <span class="badge bg-danger">FAILED</span>
+            {% else %}
+              <span class="badge bg-secondary">{{ r.status.value }}</span>
+            {% endif %}
+          </td>
+          <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>
+            {% if r.status.value == "READY" %}
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('gap.view_report', report_id=r.id) }}">View</a>
+              <a class="btn btn-sm btn-outline-success" href="{{ url_for('gap.download_report', report_id=r.id) }}">Excel</a>
+            {% elif r.status.value == "PROCESSING" %}
+              <span class="text-muted">Processing…</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
-      </select>
-    </div>
-
-    <button type="submit" class="px-4 py-2 rounded bg-blue-600 text-white">
-      Run Gap Analysis
-    </button>
-  </form>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">No gap analysis reports yet. Run one above.</p>
+  {% endif %}
 </div>
 
-<!-- Loading overlay -->
-<div id="loadingOverlay" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center">
-  <div class="bg-white rounded-lg p-6 w-96 shadow">
-    <div class="flex items-center gap-3">
-      <div class="animate-spin h-5 w-5 border-2 border-gray-300 border-t-gray-800 rounded-full"></div>
-      <div class="font-medium">Running analysis…</div>
+<div id="loadingOverlay" class="d-none position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background:rgba(0,0,0,0.4);z-index:9999">
+  <div class="bg-white rounded p-4 shadow" style="max-width:400px">
+    <div class="d-flex align-items-center gap-3">
+      <div class="spinner-border spinner-border-sm text-primary"></div>
+      <div class="fw-medium">Submitting analysis…</div>
     </div>
-    <div class="text-sm text-gray-600 mt-2">
-      Extracting claims, matching evidence, generating report…
+    <div class="text-muted small mt-2">
+      The analysis runs in the background. You'll see the result in the history below.
     </div>
   </div>
 </div>
 
 <script>
   document.getElementById("gapForm").addEventListener("submit", function() {
-    document.getElementById("loadingOverlay").classList.remove("hidden");
+    document.getElementById("runBtn").disabled = true;
+    document.getElementById("loadingOverlay").classList.remove("d-none");
   });
 </script>
 {% endblock %}

@@ -7,10 +7,11 @@ services:
     volumes:
       - ./:/app
       - ./storage:/app/storage
-      - hf_cache:/app/.cache/huggingface
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   worker:
     build: .
@@ -19,10 +20,11 @@ services:
     volumes:
       - ./:/app
       - ./storage:/app/storage
-      - hf_cache:/app/.cache/huggingface
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   db:
     image: postgres:16
@@ -34,6 +36,11 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tacitgap -d tacitgap"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7
@@ -42,4 +49,3 @@ services:
 
 volumes:
   pgdata:
-  hf_cache:

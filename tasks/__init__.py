@@ -18,6 +18,4 @@ celery_app.conf.update(
 
 # IMPORTANT: import task modules AFTER celery_app exists
 import tasks.ingest  # noqa: E402,F401
-# later:
-# import tasks.gap  # noqa: E402,F401
-# import tasks.pdf  # noqa: E402,F401
+import tasks.gap  # noqa: E402,F401
