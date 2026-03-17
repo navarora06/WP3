@@ -2,14 +2,21 @@
 {% block content %}
 <div class="container">
   <div class="d-flex align-items-center justify-content-between mb-4">
-    <h1>Knowledge Gap Analysis Report #{{ rpt.id }}</h1>
+    <div>
+      <h1 class="d-inline">Knowledge Gap Analysis Report #{{ rpt.id }}</h1>
+      {% if rpt.report_name %}
+        <span class="text-muted small ms-2">({{ rpt.report_name }})</span>
+      {% endif %}
+      {% if rpt.is_reviewed %}
+        <span class="badge bg-info ms-2" title="Reviewed on {{ rpt.reviewed_at.strftime('%Y-%m-%d %H:%M') if rpt.reviewed_at else '' }}">Reviewed</span>
+      {% endif %}
+    </div>
     <div>
       <a class="btn btn-outline-success" href="{{ url_for('gap.download_report', report_id=rpt.id) }}">Download Excel</a>
       <a class="btn btn-outline-secondary ms-2" href="{{ url_for('gap.new_gap') }}">Back</a>
     </div>
   </div>
 
-  <!-- Summary -->
   {% if summary %}
   <div class="row mb-4">
     <div class="col-md-6">
@@ -29,19 +36,18 @@
   </div>
   {% endif %}
 
-  <!-- Gap Analysis Table -->
   <h4 class="mb-3">Claims Analysis</h4>
-  <div class="table-responsive mb-5">
+  <div class="table-responsive mb-3">
     <table class="table table-bordered table-hover">
       <thead class="table-dark">
         <tr>
-          <th style="width:20%">Claim</th>
-          <th style="width:10%">Label</th>
-          <th style="width:20%">Interview Evidence</th>
-          <th style="width:20%">Doc Evidence</th>
-          <th style="width:8%">Confidence</th>
-          <th style="width:5%">Action</th>
-          <th style="width:17%">Action Suggestion</th>
+          <th style="width:18%">Claim</th>
+          <th style="width:9%">Label</th>
+          <th style="width:18%">Interview Evidence</th>
+          <th style="width:18%">Doc Evidence</th>
+          <th style="width:7%">Confidence</th>
+          <th style="width:15%">Action Suggestion</th>
+          <th style="width:15%">Action</th>
         </tr>
       </thead>
       <tbody>
@@ -68,15 +74,36 @@
               <span class="text-secondary fw-bold">Low</span>
             {% endif %}
           </td>
-          <td>{{ r.action }}</td>
           <td class="small">{{ r.suggestion }}</td>
+          <td>
+            <select class="form-select form-select-sm action-select" data-item-id="{{ r.id }}">
+              <option value="">-- select --</option>
+              {% for opt in action_options %}
+                <option value="{{ opt }}" {% if r.suggestion == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 
-  <!-- Out of Scope -->
+  <div class="d-flex gap-2 mb-5">
+    <button type="button" class="btn btn-primary" id="submitReviewBtn" data-report-id="{{ rpt.id }}">
+      Submit Review
+    </button>
+    {% if rpt.is_reviewed %}
+    <form method="post" action="{{ url_for('gap.create_knowledge', report_id=rpt.id) }}" class="d-inline">
+      <button type="submit" class="btn btn-success" {% if rpt.knowledge_created %}disabled{% endif %}>
+        {% if rpt.knowledge_created %}Knowledge Created{% else %}Create Knowledge{% endif %}
+      </button>
+    </form>
+    {% else %}
+    <button type="button" class="btn btn-success" disabled title="Submit a review first">Create Knowledge</button>
+    {% endif %}
+  </div>
+
   {% if out_of_scope %}
   <h4 class="mb-3">Out-of-Scope Sentences ({{ out_of_scope|length }})</h4>
   <div class="card mb-4">
@@ -97,4 +124,38 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+document.getElementById('submitReviewBtn').addEventListener('click', function() {
+  var reportId = this.dataset.reportId;
+  var items = [];
+  document.querySelectorAll('.action-select').forEach(function(sel) {
+    if (sel.value) {
+      items.push({id: parseInt(sel.dataset.itemId), action: sel.value});
+    }
+  });
+
+  if (items.length === 0) {
+    alert('Please select at least one action before submitting.');
+    return;
+  }
+
+  this.disabled = true;
+  this.textContent = 'Saving…';
+
+  fetch('/gap/report/' + reportId + '/submit-review', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({items: items})
+  }).then(function(resp) {
+    if (resp.ok) {
+      window.location.reload();
+    } else {
+      alert('Failed to save review.');
+      document.getElementById('submitReviewBtn').disabled = false;
+      document.getElementById('submitReviewBtn').textContent = 'Submit Review';
+    }
+  });
+});
+</script>
 {% endblock %}

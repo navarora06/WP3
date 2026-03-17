@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from flask_login import UserMixin
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Enum, JSON, Float
+from sqlalchemy import String, Text, Integer, Boolean, DateTime, ForeignKey, Enum, JSON, Float
 
 
 class Base(DeclarativeBase):
@@ -95,6 +95,21 @@ class SupportDoc(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+ACTION_DEFAULTS = {
+    GapLabel.SUPPORTED: "Already documented",
+    GapLabel.CONTRADICTED: "Investigate Further",
+    GapLabel.UNKNOWN: "Confirm in next review",
+}
+
+ACTION_OPTIONS = [
+    "Already documented",
+    "Confirm in next review",
+    "Investigate Further",
+    "Add to documentation",
+    "Discard",
+]
+
+
 class GapReport(Base):
     __tablename__ = "gap_reports"
 
@@ -106,7 +121,11 @@ class GapReport(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     report_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    report_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
     report_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_reviewed: Mapped[bool] = mapped_column(default=False, server_default="false")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    knowledge_created: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
 class GapItem(Base):

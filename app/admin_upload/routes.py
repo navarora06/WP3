@@ -23,27 +23,23 @@ bp = Blueprint("admin_upload", __name__, url_prefix="/admin")
 @bp.get("/upload")
 @login_required
 def index():
-    return render_template(
-        "admin_upload/index.html",
-        audio_form=UploadAudioForm(),
-        doc_form=UploadDocForm(),
-    )
-
-
-@bp.get("/history/uploads")
-@login_required
-def history_uploads():
     uid = int(current_user.get_id())
     with db_session() as db:
         interviews = db.execute(
             select(Interview).where(Interview.created_by == uid).order_by(desc(Interview.created_at))
         ).scalars().all()
-
         docs = db.execute(
             select(SupportDoc).where(SupportDoc.created_by == uid).order_by(desc(SupportDoc.created_at))
         ).scalars().all()
 
-    return render_template("admin_upload/history.html", interviews=interviews, docs=docs)
+    return render_template(
+        "admin_upload/index.html",
+        audio_form=UploadAudioForm(),
+        doc_form=UploadDocForm(),
+        interviews=interviews,
+        docs=docs,
+    )
+
 
 
 @bp.get("/interview/<int:interview_id>")
@@ -160,7 +156,7 @@ def upload_doc():
             ingest_doc_task.delay(doc.id)
 
     flash("Document uploaded.", "success")
-    return redirect(url_for("admin_upload.history_uploads"))
+    return redirect(url_for("admin_upload.index"))
 
 
 # ----------------------------
@@ -191,7 +187,7 @@ def delete_interview(interview_id: int):
         audit(db, uid, "DELETE_AUDIO", "INTERVIEW", interview_id, None)
 
     flash("Interview deleted.", "success")
-    return redirect(url_for("admin_upload.history_uploads"))
+    return redirect(url_for("admin_upload.index"))
 
 
 @bp.post("/delete/doc/<int:doc_id>")
@@ -217,7 +213,7 @@ def delete_doc(doc_id: int):
         audit(db, uid, "DELETE_DOC", "SUPPORT_DOC", doc_id, None)
 
     flash("Document deleted.", "success")
-    return redirect(url_for("admin_upload.history_uploads"))
+    return redirect(url_for("admin_upload.index"))
 
 
 # ----------------------------

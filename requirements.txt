@@ -24,3 +24,7 @@ pymupdf
 python-docx
 beautifulsoup4
 lxml
+
+azure-search-documents
+gremlinpython
+Pillow

@@ -21,9 +21,7 @@
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 {% if current_user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="/admin/upload">Upload</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/admin/history/uploads">Upload history</a></li>
                     <li class="nav-item"><a class="nav-link" href="/gap/new">Gap analysis</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/gap/history">Gap history</a></li>
                 {% endif %}
             </ul>
             <form action="/logout" method="post" class="d-flex">

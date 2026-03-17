@@ -7,6 +7,7 @@ Generate a 3-tab Excel gap analysis report matching the project format:
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.worksheet.datavalidation import DataValidation
 
 
 _HEADER_FONT = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
@@ -37,36 +38,68 @@ def _style_header(ws, cols):
         cell.border = _THIN_BORDER
 
 
-def generate_gap_report_excel(output_path: str, data: dict, report_id: int):
+_ACTION_DEFAULTS = {
+    "SUPPORTED": "Already documented",
+    "CONTRADICTED": "Investigate Further",
+    "UNKNOWN": "Confirm in next review",
+}
+
+_ACTION_OPTIONS = [
+    "Already documented",
+    "Confirm in next review",
+    "Investigate Further",
+    "Add to documentation",
+    "Discard",
+]
+
+
+GAP_HEADERS = ["Claim", "Label", "Interview Evidence", "Doc Evidence",
+               "Confidence", "Action Suggestion", "Action"]
+
+
+def generate_gap_report_excel(output_path: str, data: dict, report_id: int,
+                              report_name: str = ""):
     wb = Workbook()
 
     # ---- Tab 1: Gap_Analysis ----
     ws1 = wb.active
     ws1.title = "Gap_Analysis"
 
-    cols = ["Claim", "Label", "Interview Evidence", "Doc Evidence",
-            "Confidence", "Action", "Action Suggestion"]
-    _style_header(ws1, cols)
+    _style_header(ws1, GAP_HEADERS)
 
     ws1.column_dimensions["A"].width = 35
     ws1.column_dimensions["B"].width = 16
     ws1.column_dimensions["C"].width = 35
     ws1.column_dimensions["D"].width = 35
     ws1.column_dimensions["E"].width = 14
-    ws1.column_dimensions["F"].width = 12
-    ws1.column_dimensions["G"].width = 30
+    ws1.column_dimensions["F"].width = 30
+    ws1.column_dimensions["G"].width = 22
+
+    action_dv = DataValidation(
+        type="list",
+        formula1='"' + ",".join(_ACTION_OPTIONS) + '"',
+        allow_blank=False,
+    )
+    action_dv.error = "Please select a valid action."
+    action_dv.errorTitle = "Invalid Action"
+    action_dv.prompt = "Choose an action"
+    action_dv.promptTitle = "Action"
+    ws1.add_data_validation(action_dv)
 
     for row_idx, item in enumerate(data.get("gap_analysis", []), start=2):
         label = item.get("label", "UNKNOWN").upper()
         confidence = item.get("confidence", "Low")
+        suggestion = item.get("action_suggestion") or _ACTION_DEFAULTS.get(label, "Confirm in next review")
+        action_val = item.get("action", "") or ""
 
         ws1.cell(row=row_idx, column=1, value=item.get("claim", ""))
         label_cell = ws1.cell(row=row_idx, column=2, value=label)
         ws1.cell(row=row_idx, column=3, value=item.get("interview_evidence", ""))
         ws1.cell(row=row_idx, column=4, value=item.get("doc_evidence", ""))
         ws1.cell(row=row_idx, column=5, value=confidence)
-        ws1.cell(row=row_idx, column=6, value="")
-        ws1.cell(row=row_idx, column=7, value=item.get("action_suggestion", ""))
+        ws1.cell(row=row_idx, column=6, value=suggestion)
+        action_cell = ws1.cell(row=row_idx, column=7, value=action_val)
+        action_dv.add(action_cell)
 
         if label in _LABEL_FILLS:
             label_cell.fill = _LABEL_FILLS[label]
@@ -100,6 +133,8 @@ def generate_gap_report_excel(output_path: str, data: dict, report_id: int):
 
     summary = data.get("summary", {})
     metrics = [
+        ("Report ID", report_id),
+        ("Report Name", report_name),
         ("Total claims included", summary.get("total_claims", 0)),
         ("Supported", summary.get("supported", 0)),
         ("Contradicted", summary.get("contradicted", 0)),

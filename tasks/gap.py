@@ -1,11 +1,12 @@
 import os
+import re
 import json
 import logging
 
 from tasks import celery_app
 from app.config import Config
 from app.extensions import init_db
-from app.models import GapReport, GapItem, GapLabel, InterviewText, SupportDoc, Status
+from app.models import GapReport, GapItem, GapLabel, Interview, InterviewText, SupportDoc, Status, ACTION_DEFAULTS
 from app.util import db_session
 from app.storage_backend import StorageBackend
 from tasks.azure_agent import run_gap_analysis_agent
@@ -21,6 +22,9 @@ def gap_analysis_task(report_id: int):
     init_db(cfg.DATABASE_URL)
     storage = StorageBackend(cfg.STORAGE_ROOT)
 
+    def _slugify(s: str) -> str:
+        return re.sub(r'[^a-zA-Z0-9]+', '_', s).strip('_')[:80]
+
     with db_session() as db:
         report = db.get(GapReport, report_id)
         if not report:
@@ -30,6 +34,9 @@ def gap_analysis_task(report_id: int):
 
         interview_id = report.interview_id
         doc_id = report.doc_id
+
+        interview = db.get(Interview, interview_id)
+        interview_title = interview.title if interview else "Unknown"
 
         itext = (
             db.query(InterviewText)
@@ -43,6 +50,9 @@ def gap_analysis_task(report_id: int):
         segments_json = (itext.segments_json or {}).get("segments", []) if itext else []
         doc_title = doc.title if doc else "Unknown"
         doc_text = (doc.extracted_text_en or "").strip() if doc else ""
+
+        report_name = f"{_slugify(interview_title)}_{_slugify(doc_title)}_gapreport"
+        report.report_name = report_name
 
     if not transcript_en or not doc_text:
         log.warning("Report %s: empty transcript or doc text", report_id)
@@ -77,10 +87,10 @@ def gap_analysis_task(report_id: int):
             "summary": summary,
         }
 
-        excel_key = f"reports/gap_report_{report_id}.xlsx"
+        excel_key = f"reports/{report_name}_{report_id}.xlsx"
         excel_path = storage.resolve_path(excel_key)
         os.makedirs(os.path.dirname(excel_path), exist_ok=True)
-        generate_gap_report_excel(excel_path, report_data, report_id)
+        generate_gap_report_excel(excel_path, report_data, report_id, report_name)
 
         with db_session() as db:
             report = db.get(GapReport, report_id)
@@ -103,7 +113,7 @@ def gap_analysis_task(report_id: int):
                     interview_evidence=item.get("interview_evidence", ""),
                     doc_evidence=item.get("doc_evidence", ""),
                     confidence=item.get("confidence", "Low"),
-                    action_suggestion=item.get("action_suggestion", ""),
+                    action_suggestion=ACTION_DEFAULTS.get(label, "Confirm in next review"),
                 ))
 
             report.report_json = report_data
