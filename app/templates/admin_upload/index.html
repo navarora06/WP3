@@ -100,21 +100,40 @@
               {% for i in interviews %}
               <tr>
                 <td>{{ i.id }}</td>
-                <td><a href="/admin/interview/{{ i.id }}">{{ i.title }}</a></td>
+                <td>
+                  {% if i.status.value == "READY" %}
+                    {{ i.title }}
+                  {% else %}
+                    <a href="/admin/interview/{{ i.id }}">{{ i.title }}</a>
+                  {% endif %}
+                </td>
                 <td><span class="badge text-bg-secondary">{{ i.status.value }}</span></td>
                 <td>{{ "Yes" if i.is_finnish else "No" }}</td>
                 <td class="text-muted">{{ i.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                 <td class="text-end">
-                  <div class="btn-group btn-group-sm" role="group">
-                    {% if i.status.value == "READY" %}
-                      <a class="btn btn-outline-success" href="/admin/download/interview/{{ i.id }}/transcript">Download</a>
-                    {% else %}
-                      <button class="btn btn-outline-secondary" disabled>Download</button>
-                    {% endif %}
-                    <form method="post" action="/admin/delete/interview/{{ i.id }}" onsubmit="return confirm('Delete this interview?');" class="d-inline">
-                      <button class="btn btn-outline-danger">Delete</button>
-                    </form>
-                  </div>
+                  {% if i.status.value == "READY" %}
+                    <a class="btn btn-sm btn-link text-success p-1" href="/admin/download/interview/{{ i.id }}/transcript" title="Download transcript">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                      </svg>
+                    </a>
+                  {% else %}
+                    <button class="btn btn-sm btn-link text-secondary p-1" disabled title="Download (available when ready)">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                      </svg>
+                    </button>
+                  {% endif %}
+                  <form method="post" action="/admin/delete/interview/{{ i.id }}" onsubmit="return confirm('Delete this interview?');" class="d-inline">
+                    <button type="submit" class="btn btn-sm btn-link text-danger p-1" title="Delete">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1V1a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1v2zM1 3v1h12V3H1zm8 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/>
+                      </svg>
+                    </button>
+                  </form>
                 </td>
               </tr>
               {% endfor %}
@@ -153,16 +172,29 @@
                 <td>{{ "Yes" if d.is_finnish else "No" }}</td>
                 <td class="text-muted">{{ d.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                 <td class="text-end">
-                  <div class="btn-group btn-group-sm" role="group">
-                    {% if d.status.value == "READY" %}
-                      <a class="btn btn-outline-success" href="{{ url_for('admin_upload.download_doc_pdf', doc_id=d.id) }}">Download</a>
-                    {% else %}
-                      <button class="btn btn-outline-secondary" disabled>Download</button>
-                    {% endif %}
-                    <form method="post" action="/admin/delete/doc/{{ d.id }}" onsubmit="return confirm('Delete this document?');" class="d-inline">
-                      <button class="btn btn-outline-danger">Delete</button>
-                    </form>
-                  </div>
+                  {% if d.status.value == "READY" %}
+                    <a class="btn btn-sm btn-link text-success p-1" href="{{ url_for('admin_upload.download_doc_pdf', doc_id=d.id) }}" title="Download PDF">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                      </svg>
+                    </a>
+                  {% else %}
+                    <button class="btn btn-sm btn-link text-secondary p-1" disabled title="Download (available when ready)">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                      </svg>
+                    </button>
+                  {% endif %}
+                  <form method="post" action="/admin/delete/doc/{{ d.id }}" onsubmit="return confirm('Delete this document?');" class="d-inline">
+                    <button type="submit" class="btn btn-sm btn-link text-danger p-1" title="Delete">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1V1a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1v2zM1 3v1h12V3H1zm8 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/>
+                      </svg>
+                    </button>
+                  </form>
                 </td>
               </tr>
               {% endfor %}

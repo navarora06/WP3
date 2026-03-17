@@ -47,13 +47,12 @@
           <th>Document</th>
           <th>Status</th>
           <th>Created</th>
-          <th>Actions</th>
-          <th style="width:40px"></th>
+          <th style="width:90px">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for r in reports %}
-        <tr>
+        <tr class="{% if r.status.value == 'READY' %}gap-row-clickable{% endif %}" {% if r.status.value == 'READY' %}data-view-url="{{ url_for('gap.view_report', report_id=r.id) }}"{% endif %}>
           <td>{{ r.id }}</td>
           <td title="{{ interview_map.get(r.interview_id, '') }}">
             {{ interview_map.get(r.interview_id, r.interview_id)|string|truncate(20, True, '…') }}
@@ -76,33 +75,37 @@
             {% endif %}
           </td>
           <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-          <td>
+          <td class="gap-actions-cell">
             {% if r.status.value == "READY" %}
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('gap.view_report', report_id=r.id) }}">View</a>
-              <a class="btn btn-sm btn-outline-success" href="{{ url_for('gap.download_report', report_id=r.id) }}">Excel</a>
+              <a class="btn btn-sm btn-link text-success p-1" href="{{ url_for('gap.download_report', report_id=r.id) }}" title="Download Excel" onclick="event.stopPropagation();">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                  <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                </svg>
+              </a>
+              <div class="dropdown d-inline">
+                <button class="btn btn-sm btn-link text-dark p-1" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="More options" onclick="event.stopPropagation();">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
+                  </svg>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li>
+                    <a class="dropdown-item" href="#" onclick="openUploadModal({{ r.id }}); return false;">Upload Reviewed Report</a>
+                  </li>
+                  <li>
+                    <form method="post" action="{{ url_for('gap.create_knowledge', report_id=r.id) }}" class="d-inline" onclick="event.stopPropagation();">
+                      <button type="submit" class="dropdown-item border-0 bg-transparent w-100 text-start {% if r.knowledge_created or not r.is_reviewed %}text-muted{% endif %}" {% if r.knowledge_created or not r.is_reviewed %}disabled{% endif %} title="{% if not r.is_reviewed %}Submit a review first{% elif r.knowledge_created %}Already created{% else %}Create knowledge from this report{% endif %}">
+                        {% if r.knowledge_created %}Knowledge Created{% elif not r.is_reviewed %}Create Knowledge (review first){% else %}Create Knowledge{% endif %}
+                      </button>
+                    </form>
+                  </li>
+                </ul>
+              </div>
             {% elif r.status.value == "PROCESSING" %}
-              <span class="text-muted">Processing…</span>
+              <span class="text-muted small">Processing…</span>
             {% else %}
               <span class="text-muted">-</span>
-            {% endif %}
-          </td>
-          <td>
-            {% if r.status.value == "READY" %}
-            <div class="dropdown">
-              <button class="btn btn-sm btn-link text-dark p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="More options">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                  <circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
-                </svg>
-              </button>
-              <ul class="dropdown-menu dropdown-menu-end">
-                <li>
-                  <a class="dropdown-item" href="#" onclick="openUploadModal({{ r.id }}); return false;">Upload Reviewed Report</a>
-                </li>
-                <li>
-                  <a class="dropdown-item text-muted" href="#" onclick="return false;" title="Coming soon">Create Knowledge</a>
-                </li>
-              </ul>
-            </div>
             {% endif %}
           </td>
         </tr>
@@ -156,10 +159,22 @@
   </div>
 </div>
 
+<style>
+.gap-row-clickable { cursor: pointer; }
+.gap-row-clickable:hover { background-color: rgba(0,0,0,.05); }
+</style>
 <script>
 document.getElementById("gapForm").addEventListener("submit", function() {
   document.getElementById("runBtn").disabled = true;
   document.getElementById("loadingOverlay").classList.remove("d-none");
+});
+
+document.querySelectorAll('.gap-row-clickable').forEach(function(row) {
+  row.addEventListener('click', function(e) {
+    if (e.target.closest('.gap-actions-cell')) return;
+    var url = this.dataset.viewUrl;
+    if (url) window.location.href = url;
+  });
 });
 
 function openUploadModal(reportId) {
