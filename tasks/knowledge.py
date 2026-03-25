@@ -14,6 +14,7 @@ When triggered for a reviewed gap report, this task:
 import logging
 import os
 import re
+from io import BytesIO
 
 from tasks import celery_app
 from app.config import Config
@@ -21,8 +22,8 @@ from app.extensions import init_db
 from app.models import GapReport, GapItem, GapLabel, InterviewText, SupportDoc, Interview
 from app.util import db_session
 from app.storage_backend import StorageBackend
-from tasks.embeddings import embed_texts, embed_image
-from tasks.search_index import ensure_index, upsert_documents
+from tasks.embeddings import embed_texts, embed_image, vision_image_text_for_index
+from tasks.search_index import ensure_index, upsert_documents, delete_documents_for_report
 from tasks.graph import ensure_graph, add_vertex, add_edge, cleanup as gremlin_cleanup
 
 log = logging.getLogger(__name__)
@@ -84,25 +85,103 @@ def _chunk_by_segments(segments: list[dict]) -> list[str]:
     return chunks
 
 
-def _extract_images_from_doc(storage: StorageBackend, storage_key: str) -> list[bytes]:
-    """Extract images from a PDF/DOCX file stored at storage_key."""
-    images = []
+def _page_text_blocks_fitz(page) -> list[tuple[float, float, str]]:
+    """(y0, y1, text) for each text block on a PDF page (PyMuPDF)."""
+    blocks: list[tuple[float, float, str]] = []
+    try:
+        d = page.get_text("dict")
+    except Exception:
+        return blocks
+    for b in d.get("blocks", []):
+        if b.get("type") != 0:
+            continue
+        bbox = b.get("bbox")
+        if not bbox or len(bbox) < 4:
+            continue
+        y0, y1 = float(bbox[1]), float(bbox[3])
+        line_parts: list[str] = []
+        for line in b.get("lines", []):
+            span_txt = "".join(
+                (s.get("text") or s.get("c") or "") for s in line.get("spans", [])
+            )
+            if span_txt.strip():
+                line_parts.append(span_txt.strip())
+        if line_parts:
+            blocks.append((y0, y1, " ".join(line_parts)))
+    return blocks
+
+
+def _text_above_image_on_page(
+    page, xref: int, text_blocks: list[tuple[float, float, str]], fallback_page_text: str
+) -> str:
+    """Use layout: take text blocks ending above the figure (manual headings / captions)."""
+    img_y0 = None
+    try:
+        rects = page.get_image_rects(xref)
+        if rects:
+            img_y0 = float(rects[0].y0)
+    except Exception:
+        pass
+
+    if img_y0 is not None and text_blocks:
+        # Blocks whose bottom is at or above the top of the image (PDF y grows downward)
+        above = [b for b in text_blocks if b[1] <= img_y0 + 3.0]
+        if above:
+            above.sort(key=lambda b: b[1], reverse=True)
+            parts: list[str] = []
+            n = 0
+            for _y0, _y1, txt in above:
+                if txt and txt not in parts:
+                    parts.append(txt)
+                    n += len(txt)
+                    if n > 480:
+                        break
+            return " ".join(parts)[:500]
+
+    return (fallback_page_text or "").strip()[:400]
+
+
+def _extract_images_from_doc(
+    storage: StorageBackend, storage_key: str
+) -> list[tuple[bytes, str | None, str, int]]:
+    """
+    Extract images from PDF/DOCX.
+
+    Returns list of (image_bytes, format_hint, section_context, page_number).
+    section_context is text from the PDF page placed above the figure when possible
+    (so embeddings align with manual headings). page_number is 1-based; 0 = unknown (DOCX).
+    """
+    out: list[tuple[bytes, str | None, str, int]] = []
     path = storage.resolve_path(storage_key)
     if not os.path.exists(path):
-        return images
+        return out
 
     lower = storage_key.lower()
     if lower.endswith(".pdf"):
         try:
             import fitz
             doc = fitz.open(path)
-            for page in doc:
-                for img_info in page.get_images(full=True):
-                    xref = img_info[0]
-                    base_image = doc.extract_image(xref)
-                    if base_image and base_image.get("image"):
-                        images.append(base_image["image"])
-            doc.close()
+            try:
+                for pno, page in enumerate(doc):
+                    page_num = pno + 1
+                    text_blocks = _page_text_blocks_fitz(page)
+                    fallback = (page.get_text() or "").strip()
+                    for img_info in page.get_images(full=True):
+                        xref = img_info[0]
+                        base_image = doc.extract_image(xref)
+                        if not base_image or not base_image.get("image"):
+                            continue
+                        ext = base_image.get("ext")
+                        if isinstance(ext, bytes):
+                            hint = ext.decode("ascii", errors="ignore") or None
+                        elif isinstance(ext, str):
+                            hint = ext
+                        else:
+                            hint = None
+                        section = _text_above_image_on_page(page, xref, text_blocks, fallback)
+                        out.append((base_image["image"], hint, section, page_num))
+            finally:
+                doc.close()
         except Exception:
             log.warning("Could not extract images from PDF: %s", path)
     elif lower.endswith((".docx", ".doc")):
@@ -111,11 +190,54 @@ def _extract_images_from_doc(storage: StorageBackend, storage_key: str) -> list[
             doc = Document(path)
             for rel in doc.part.rels.values():
                 if "image" in rel.reltype:
-                    images.append(rel.target_part.blob)
+                    out.append((rel.target_part.blob, None, "", 0))
         except Exception:
             log.warning("Could not extract images from DOCX: %s", path)
 
-    return images
+    return out
+
+
+def _normalize_image_ext(hint: str | None, img_bytes: bytes) -> str:
+    if hint:
+        h = hint.lower().strip(".")
+        if h in ("jpeg", "jpe"):
+            h = "jpg"
+        if h in ("jpg", "png", "webp", "gif"):
+            return h
+    try:
+        from PIL import Image
+
+        with Image.open(BytesIO(img_bytes)) as im:
+            fmt = (im.format or "PNG").lower()
+            if fmt in ("jpeg", "jpg"):
+                return "jpg"
+            if fmt in ("png", "webp", "gif"):
+                return fmt
+    except Exception:
+        pass
+    return "png"
+
+
+def _save_extracted_image(
+    storage: StorageBackend,
+    doc_id: int,
+    report_id: int,
+    img_idx: int,
+    img_bytes: bytes,
+    format_hint: str | None,
+) -> str | None:
+    """Write extracted bytes under uploads/docs/{doc_id}/ and return storage-relative key."""
+    ext = _normalize_image_ext(format_hint, img_bytes)
+    rel_key = f"uploads/docs/{doc_id}/extracted_rpt{report_id}_{img_idx}.{ext}"
+    try:
+        path = storage.resolve_path(rel_key)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(img_bytes)
+        return rel_key
+    except Exception:
+        log.exception("Failed to save extracted image %s", rel_key)
+        return None
 
 
 @celery_app.task
@@ -194,24 +316,57 @@ def create_knowledge_task(report_id: int):
     doc_vectors = all_vectors[len(interview_chunks):len(interview_chunks) + len(doc_chunks)]
     claim_vectors = all_vectors[len(interview_chunks) + len(doc_chunks):]
 
-    # --- 3. Extract and embed images ---
-    image_docs = []
+    # --- 3. Extract, persist, Vision caption/OCR + embeddings (text + image vectors) ---
+    image_docs: list[dict] = []
+    image_rows: list[dict] = []
     if doc_storage_key:
         images = _extract_images_from_doc(storage, doc_storage_key)
         log.info("Extracted %d images from document", len(images))
-        for img_idx, img_bytes in enumerate(images):
+        for img_idx, (img_bytes, fmt_hint, section_ctx, page_num) in enumerate(images):
             img_vec = embed_image(img_bytes)
-            if img_vec:
-                image_docs.append({
-                    "id": f"rpt{report_id}_img_{img_idx}",
-                    "content": f"[Image {img_idx + 1} from {doc_title}]",
+            if not img_vec:
+                continue
+            vision_txt = vision_image_text_for_index(img_bytes)
+            if vision_txt:
+                log.info("Image %d: indexed %d chars of caption/OCR", img_idx, len(vision_txt))
+            header_lines = [f"[Image {img_idx + 1} from {doc_title}]"]
+            if page_num:
+                header_lines.append(f"Page {page_num} in the manual.")
+            if section_ctx.strip():
+                header_lines.append(
+                    "Text and headings on the same manual page above this figure: "
+                    + section_ctx.strip()[:450]
+                )
+            header = "\n".join(header_lines)
+            content = f"{header}\n{vision_txt}" if vision_txt else header
+            storage_key_img = _save_extracted_image(
+                storage, doc_id, report_id, img_idx, img_bytes, fmt_hint
+            )
+            image_rows.append(
+                {
+                    "img_idx": img_idx,
+                    "content": content,
+                    "img_vec": img_vec,
+                    "image_storage_key": storage_key_img or "",
+                }
+            )
+
+    if image_rows:
+        img_content_vectors = embed_texts([r["content"] for r in image_rows])
+        for row, cv in zip(image_rows, img_content_vectors):
+            image_docs.append(
+                {
+                    "id": f"rpt{report_id}_img_{row['img_idx']}",
+                    "content": row["content"],
                     "source_type": "document_image",
                     "source_id": doc_id,
                     "report_id": report_id,
-                    "chunk_index": img_idx,
-                    "content_vector": [],
-                    "image_vector": img_vec,
-                })
+                    "chunk_index": row["img_idx"],
+                    "image_storage_key": row["image_storage_key"],
+                    "content_vector": cv,
+                    "image_vector": row["img_vec"],
+                }
+            )
 
     # --- 4. Build search documents ---
     search_docs = []
@@ -224,6 +379,7 @@ def create_knowledge_task(report_id: int):
             "source_id": interview_id,
             "report_id": report_id,
             "chunk_index": idx,
+            "image_storage_key": "",
             "content_vector": vec,
             "image_vector": [],
         })
@@ -236,6 +392,7 @@ def create_knowledge_task(report_id: int):
             "source_id": doc_id,
             "report_id": report_id,
             "chunk_index": idx,
+            "image_storage_key": "",
             "content_vector": vec,
             "image_vector": [],
         })
@@ -248,15 +405,17 @@ def create_knowledge_task(report_id: int):
             "source_id": claim["id"],
             "report_id": report_id,
             "chunk_index": idx,
+            "image_storage_key": "",
             "content_vector": vec,
             "image_vector": [],
         })
 
     search_docs.extend(image_docs)
 
-    # --- 5. Upsert into Azure AI Search ---
+    # --- 5. Replace Search rows for this report, then upsert ---
     log.info("Upserting %d documents into Azure AI Search", len(search_docs))
     ensure_index()
+    delete_documents_for_report(report_id)
     upsert_documents(search_docs)
 
     # --- 6. Build knowledge graph ---

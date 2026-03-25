@@ -50,6 +50,16 @@ def _submit(query: str, bindings: dict | None = None):
         raise
 
 
+def _gremlin_escape(value) -> str:
+    """
+    Escape a value for use inside a Gremlin single-quoted string literal.
+    Cosmos Gremlin rejects unescaped newlines and other control chars; apostrophe is doubled.
+    """
+    s = "" if value is None else str(value)
+    s = s.replace("\r\n", " ").replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    return s.replace("'", "''")
+
+
 def ensure_graph():
     """Verify connectivity (Cosmos creates the DB/graph via portal)."""
     try:
@@ -63,10 +73,11 @@ def ensure_graph():
 def add_vertex(label: str, vertex_id: str, properties: dict):
     """Add or update a vertex."""
     props = "".join(
-        f".property('{k}', '{str(v).replace(chr(39), chr(39)+chr(39))}')"
-        for k, v in properties.items()
+        f".property('{k}', '{_gremlin_escape(v)}')" for k, v in properties.items()
     )
-    query = f"g.V('{vertex_id}').fold().coalesce(unfold(), addV('{label}').property('id', '{vertex_id}'){props})"
+    vid = _gremlin_escape(vertex_id)
+    lbl = _gremlin_escape(label)
+    query = f"g.V('{vid}').fold().coalesce(unfold(), addV('{lbl}').property('id', '{vid}'){props})"
     _submit(query)
 
 
@@ -75,13 +86,13 @@ def add_edge(label: str, from_id: str, to_id: str, properties: dict | None = Non
     props = ""
     if properties:
         props = "".join(
-            f".property('{k}', '{str(v).replace(chr(39), chr(39)+chr(39))}')"
-            for k, v in properties.items()
+            f".property('{k}', '{_gremlin_escape(v)}')" for k, v in properties.items()
         )
+    fid, tid, el = _gremlin_escape(from_id), _gremlin_escape(to_id), _gremlin_escape(label)
     query = (
-        f"g.V('{from_id}').coalesce("
-        f"  outE('{label}').where(inV().hasId('{to_id}')),"
-        f"  addE('{label}').to(g.V('{to_id}')){props}"
+        f"g.V('{fid}').coalesce("
+        f"  outE('{el}').where(inV().hasId('{tid}')),"
+        f"  addE('{el}').to(g.V('{tid}')){props}"
         f")"
     )
     _submit(query)

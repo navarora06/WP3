@@ -44,6 +44,11 @@ def ensure_index():
         SimpleField(name="source_id", type=SearchFieldDataType.Int32, filterable=True),
         SimpleField(name="report_id", type=SearchFieldDataType.Int32, filterable=True),
         SimpleField(name="chunk_index", type=SearchFieldDataType.Int32, filterable=True),
+        SimpleField(
+            name="image_storage_key",
+            type=SearchFieldDataType.String,
+            filterable=True,
+        ),
         SearchField(
             name="content_vector",
             type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
@@ -96,3 +101,33 @@ def upsert_documents(docs: list[dict]):
         except Exception:
             log.exception("Failed to upsert document batch %d", i // batch_size + 1)
             raise
+
+
+def delete_documents_for_report(report_id: int) -> int:
+    """
+    Remove all indexed chunks for a gap report before re-upserting.
+
+    Upserting the same logical ids replaces rows, but if extraction produces fewer
+    images/chunks than a previous run, stale ids (e.g. rpt8_img_40) would remain
+    without an explicit delete.
+    """
+    endpoint, credential = _get_credentials()
+    client = SearchClient(endpoint=endpoint, index_name=INDEX_NAME, credential=credential)
+    deleted = 0
+    while True:
+        results = client.search(
+            search_text="*",
+            filter=f"report_id eq {int(report_id)}",
+            select=["id"],
+            top=1000,
+        )
+        batch = [{"id": r["id"]} for r in results]
+        if not batch:
+            break
+        client.delete_documents(documents=batch)
+        deleted += len(batch)
+        if len(batch) < 1000:
+            break
+    if deleted:
+        log.info("Deleted %d Azure Search documents for report_id=%s", deleted, report_id)
+    return deleted

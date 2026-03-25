@@ -2,7 +2,6 @@
 Helpers for generating text and image embeddings using Azure OpenAI and Azure AI Vision.
 """
 
-import base64
 import logging
 import time
 
@@ -60,6 +59,84 @@ def embed_texts(texts: list[str], batch_size: int = 16) -> list[list[float]]:
         time.sleep(0.5)
 
     return all_embeddings
+
+
+def _parse_image_analysis_json(data: dict) -> str:
+    """Extract human-readable strings from Image Analysis JSON (caption + read/OCR)."""
+    parts: list[str] = []
+
+    cap = data.get("captionResult")
+    if isinstance(cap, dict):
+        t = cap.get("text")
+        if isinstance(t, str) and t.strip():
+            parts.append(t.strip())
+
+    rr = data.get("readResult")
+    if isinstance(rr, dict):
+        for block in rr.get("blocks") or []:
+            if not isinstance(block, dict):
+                continue
+            for line in block.get("lines") or []:
+                if isinstance(line, dict):
+                    lt = line.get("text")
+                    if isinstance(lt, str) and lt.strip():
+                        parts.append(lt.strip())
+        for page in rr.get("pages") or []:
+            if not isinstance(page, dict):
+                continue
+            for line in page.get("lines") or []:
+                if isinstance(line, dict):
+                    lt = line.get("text")
+                    if isinstance(lt, str) and lt.strip():
+                        parts.append(lt.strip())
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in parts:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return " ".join(out)[:2500]
+
+
+def vision_image_text_for_index(image_bytes: bytes) -> str:
+    """
+    Caption + on-image OCR via Azure AI Vision Image Analysis.
+    Stored in Search `content` and embedded as `content_vector` so text queries
+    (e.g. SIM, zoom) retrieve figure chunks—not only image_vector search.
+    """
+    cfg = _get_config()
+    endpoint = cfg.AZURE_VISION_ENDPOINT.rstrip("/")
+    key = cfg.AZURE_VISION_KEY
+    if not endpoint or not key:
+        return ""
+
+    url = f"{endpoint}/computervision/imageanalysis:analyze"
+    headers = {
+        "Ocp-Apim-Subscription-Key": key,
+        "Content-Type": "application/octet-stream",
+    }
+    param_sets = [
+        {"api-version": "2024-02-01", "features": "caption,read", "model-version": "latest"},
+        {"api-version": "2023-10-01", "features": "caption,read", "model-version": "latest"},
+        {"api-version": "2024-02-01", "features": "caption"},
+        {"api-version": "2023-10-01", "features": "caption"},
+    ]
+    for params in param_sets:
+        try:
+            resp = requests.post(url, params=params, headers=headers, data=image_bytes, timeout=60)
+            resp.raise_for_status()
+            text = _parse_image_analysis_json(resp.json())
+            if text.strip():
+                return text.strip()
+        except Exception as e:
+            log.debug("Vision image analysis failed for %s: %s", params.get("api-version"), e)
+            continue
+    log.debug(
+        "Vision Image Analysis returned no caption/OCR for an image; "
+        "text vector search may not surface this figure."
+    )
+    return ""
 
 
 def embed_image(image_bytes: bytes) -> list[float]:
