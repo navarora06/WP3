@@ -1,10 +1,10 @@
-# High-Level Design (HLD) — Complete System
+# WP3 - Research Notes, Research Findings and Architectural Choices Explanation
 
 **Tacit knowledge capture, documentation alignment, and LLM-assisted query**
 
 **Repositories:** `WP3` (back-office) · `rag-agent` (retrieval UI/API) · **Microsoft Azure** (managed AI and knowledge services)
 
-**Document purpose:** (1) Describe the **end-to-end system** and how components communicate. (2) Ground the **research framework** (tacit vs explicit knowledge). (3) Record the **evolution from a HuggingFace baseline to Azure OpenAI NLI**, so outcomes can be traced to **approach vs implementation** vs **model/prompt limits**.
+**Document purpose:** (1) Describe the **end-to-end system** and how components communicate. (2) Ground the **research framework** (tacit vs explicit knowledge). (3) Record the **evolution from a HuggingFace baseline to Azure OpenAI NLI**, so outcomes can be traced to **approach vs implementation** vs **model/prompt limits**. (4) State the **methodological workflow** (capture → structuring → retrieval) in **§1.4**, distinct from the **technical pipeline** from **§2** onward. (5) Explain the **methodological basis for tacit capture**—**SECI** and the **NLI extension**—in **§1.5** (prose only; aligned with the project’s methodology framing, not slide reproductions).
 
 ---
 
@@ -35,6 +35,55 @@ This is **not** a single monolithic “agent” in the Copilot sense, but a **fr
 
 
 NLI compares **claims** derived from (1) against **evidence** from (2).
+
+### 1.4 Methodological workflow (capture → structuring → retrieval)
+
+The subsections above (especially **§1.2**) already sketch *what* the system does. Here the same journey is described as a **research method**—the stages a study would recognise—without naming specific products or services. **§2 and below** map these stages onto **software, data stores, and cloud APIs**.
+
+1. **Capture**
+  **Goal:** Preserve **tacit-like** material and **authoritative** written material in a form suitable for later analysis. Operationally that means: spoken expert accounts (audio, with context such as who is speaking and when) and one or more **supporting documents** that represent the official or intended description of procedures, products, or policies. Capture is **faithful recording and normalisation** (e.g. a single working language for comparison) rather than interpretation of gaps.
+2. **Structuring and alignment**
+  **Goal:** Turn **continuous** interview text into **discrete, checkable units** and relate each unit to the document corpus. Each unit is treated as a **claim** about how things work or what ought to be done; the method then asks, for each claim, whether the documentation **supports** it, **contradicts** it, or leaves the relationship **unknown**, with **traceable evidence** from the text. This step is the core **methodological** move: it makes tacit assertions **comparable** to explicit knowledge in a structured way (labels, suggested actions, exports for review).
+3. **Curation and promotion**
+  **Goal:** Insert **human judgment** between automatic alignment and any reuse as “organisational knowledge.” Reviewers inspect machine outputs, adjust recommended actions, and decide when material is **ready** to be treated as vetted input for a **knowledge layer** intended for search and query—not as a replacement for governance or domain sign-off in a real deployment.
+4. **Retrieval and utilisation**
+  **Goal:** Allow **stakeholders** (researchers, reviewers, or end users in a demo setting) to **ask questions in natural language** and receive **answers grounded** in the same interview segments, document passages, gap-claim artefacts, and (where indexed) figures that were captured and curated. Methodologically this is **reuse of structured capture**: retrieval is not a separate study but the **downstream use** of the corpus produced by (1)–(3). The PoC implements this as **similarity-based retrieval plus LLM synthesis** over retrieved context; **§1.2** step 4 and **§2+** spell out how that is realised technically.
+
+**Relation to §1.2:** **§1.2** is the **compact operationalisation** of this workflow (collect → align → human-in-the-loop → utilise). **§1.4** makes the **methodological intent** explicit for readers who care about **process** before **architecture**.
+
+### 1.5 Methodological basis for tacit capture (SECI and NLI extension)
+
+**§1.1–§1.4** describe what the system does and how stages line up with research practice. This subsection records the **knowledge-management framing** distilled from the project’s methodology narrative (e.g. SECI-based tacit capture and NLI as an auditable gap layer): **why** interviews, **why** documentation is the evidence base, and **how** that differs from describing only the software stack. **§7** remains the place for **how the NLI implementation evolved** (HuggingFace baseline → Azure OpenAI).
+
+#### SECI as reference model
+
+We ground the study in the **SECI model** (Nonaka & Takeuchi): **Socialization**, **Externalization**, **Combination**, and **Internalization**—the standard account of how **tacit** and **explicit** knowledge convert into one another in organisational learning.
+
+#### How this project maps onto that framing
+
+- **Interviews** are the main instrument for **externalization**: experts articulate know-how in **speech**, which we preserve as **recorded audio** and, after capture, as **transcripts** and **English-aligned text** suitable for analysis.
+- **Supporting documents** (manuals, guides, specs) are treated as the **explicit knowledge base**—the written record against which spoken expertise is evaluated.
+- **Methodological reliability** is pursued through **cross-referencing**: the interview is not analysed in isolation; **claims** inferred from dialogue are checked **against** that documentation so alignment or tension is **evidence-backed**, not impressionistic.
+
+The intended outcome of this interaction is **structured artefacts** (discrete claims, classification outcomes, citations to document text, reviewer-facing gap reports)—not merely raw recordings. The aim is to keep the study **methodologically sound**, not only **technically interesting**: externalised speech is **cross-referenced** to an explicit corpus so downstream steps are **traceable** and open to review.
+
+#### Extending SECI with an NLI-oriented gap-analysis layer
+
+SECI explains **how tacit can become explicit**; it does not by itself **audit** whether what experts **say** **matches**, **conflicts with**, or **falls outside** what is **already written**. We therefore describe the approach as **extending SECI with an NLI-based gap analysis**:
+
+1. **Input:** interview **transcripts** (after capture and language normalisation where needed).
+2. **Transformation:** transcripts are turned into **structured claims**—short, testable propositions attributable to the interview content.
+3. **Validation:** supporting documents supply the **evidence base** used to judge each claim.
+4. **Classification (NLI layer):** each claim is classified, with reference to textual evidence, as **supported**, **contradicted**, or **unknown** relative to the documentation.
+5. **Output:** a **gap report** that aggregates these judgements for human review (and, in the PoC, structured stores and exports such as Excel).
+
+#### Review: from gap report to documentation decisions
+
+The gap report is a **decision artefact**, not a terminal output. Reviewers use it to decide, **methodologically**, what to do next—for example: material that can be **discarded** or deprioritised; themes that **warrant further investigation**; and content that **should be added or corrected** in formal documentation so explicit knowledge stays accountable to expert practice.
+
+
+
+**Relation to §1.4:** **§1.4** states the **generic** workflow (capture → structuring → retrieval). **§1.5** ties **capture and structuring** to **SECI** and states the **NLI-on-documentation** extension and **review logic** that motivate the pipeline. **§2+** show the **technical realisation**.
 
 ---
 
@@ -174,7 +223,7 @@ flowchart LR
 
 - **WP3 → Azure:** Outbound **HTTPS** from the worker to Azure APIs (keys via environment variables).
 - **rag-agent → Azure:** Same pattern; **no direct WP3 ↔ rag-agent** HTTP call in the prototype — both use Azure as the shared knowledge plane; WP3 **writes** index/graph; rag-agent **reads**. For **image-vector** retrieval, rag-agent calls **Azure AI Vision** (`vectorizeText`) when `AZURE_VISION_*` is set (same keys/endpoint as Create Knowledge).
-- **Figures on disk:** On **Create Knowledge**, the WP3 worker **saves** extracted PDF/DOCX images under `STORAGE_ROOT` (e.g. `uploads/docs/{doc_id}/extracted_rpt{report_id}_*.{ext}`) and stores the relative path in the search index as `**image_storage_key`**. **rag-agent** mounts or points `STORAGE_ROOT` at the **same** tree and serves bytes with `**GET /knowledge-image?key=...`** (PoC file share, not a WP3 HTTP API).
+- **Figures on disk:** On **Create Knowledge**, the WP3 worker **saves** extracted PDF/DOCX images under `STORAGE_ROOT` (e.g. `uploads/docs/{doc_id}/extracted_rpt{report_id}_*.{ext}`) and stores the relative path in the search index as `**image_storage_key`**. rag-agent mounts or points `STORAGE_ROOT` at the same tree and serves bytes with `**GET /knowledge-image?key=...`** (PoC file share, not a WP3 HTTP API).
 - **WP3 internal:** Browser → Flask; Flask → Redis → Celery; workers read/write **PostgreSQL** and **disk storage**.
 
 ### 3.2 Sequence — gap analysis and knowledge creation (simplified)
@@ -242,9 +291,9 @@ sequenceDiagram
 
 
 
-If Vision is **not** configured on rag-agent, the **image_vector** leg is skipped (empty vector); **text retrieval** still runs. `**retrieved_images`** is empty if chunks lack `**image_storage_key**` (re-run Create Knowledge after that field exists) or if `**STORAGE_ROOT**` on rag-agent does not contain the files.
+If Vision is **not** configured on rag-agent, the **image_vector** leg is skipped (empty vector); **text retrieval** still runs. `**retrieved_images`** is empty if chunks lack `**image_storage_key`** (re-run Create Knowledge after that field exists) or if `**STORAGE_ROOT**` on rag-agent does not contain the files.
 
-**Graph vs Temporal:** **Temporal** is optional and controlled by `**USE_TEMPORAL`**. **Graph traversal is not**—`rag-agent` **always** calls Gremlin after vector search when there are hits with `**report_id`**, merging related **claims** into the LLM context (`get_related_claims_for_report`). If **Gremlin is not configured**, credentials are wrong, or the query errors, that step simply adds **no** extra claims (degraded behaviour), unlike Temporal which is an alternate execution path. For **multi-hop** vs **current** Gremlin usage, see **§6.5.1**.
+**Graph vs Temporal:** **Temporal** is optional and controlled by `**USE_TEMPORAL`**. Graph traversal is not—`rag-agent` always calls Gremlin after vector search when there are hits with `**report_id`**, merging related **claims** into the LLM context (`get_related_claims_for_report`). If **Gremlin is not configured**, credentials are wrong, or the query errors, that step simply adds **no** extra claims (degraded behaviour), unlike Temporal which is an alternate execution path. For **multi-hop** vs **current** Gremlin usage, see **§6.5.1**.
 
 ---
 
@@ -261,7 +310,7 @@ If Vision is **not** configured on rag-agent, the **image_vector** leg is skippe
 | 6    | Worker + Azure OpenAI                | **NLI pipeline:** extract claims → classify each vs full document text.                                                                                                                           |
 | 7    | WP3                                  | Gap report in DB + Excel; UI + review workflow.                                                                                                                                                   |
 | 8    | Worker + Azure + disk                | **Create Knowledge:** text/image embeddings → AI Search (**includes `image_storage_key`**); **extracted figures saved** next to WP3 uploads; graph → Gremlin.                                     |
-| 9    | rag-agent + Azure (+ shared storage) | User question → **text + image-vector** retrieve → **Gremlin claim expansion** per `report_id` → LLM answer; `**retrieved_images`** + `**GET /knowledge-image**` when `STORAGE_ROOT` matches WP3. |
+| 9    | rag-agent + Azure (+ shared storage) | User question → **text + image-vector** retrieve → **Gremlin claim expansion** per `report_id` → LLM answer; `**retrieved_images`** + `**GET /knowledge-image`** when `STORAGE_ROOT` matches WP3. |
 
 
 ---
@@ -427,7 +476,7 @@ Gremlin is invoked **on every rag-agent query** that has vector hits carrying `*
 
 **Question:** *Do you have a concrete PoC scenario where **multi-hop traversal** or **graph-based querying** is **required** to produce the Tacit-Expert responses?*
 
-**Answer:** **No**—not in the sense that answers **depend** on walking **multiple hops** through the graph. `**rag-agent`** calls `**get_related_claims_for_report**`: a **filtered** Gremlin query over **claim** vertices sharing `**report_id`** with the reports implied by vector hits (see `rag-agent` `graph.py`), i.e. **report-scoped claim retrieval**, not a pattern such as interview → … → document section → figure.
+**Answer:** **No**—not in the sense that answers **depend** on walking **multiple hops** through the graph. `**rag-agent`** calls `**get_related_claims_for_report`**: a **filtered** Gremlin query over **claim** vertices sharing `**report_id`** with the reports implied by vector hits (see `rag-agent` `graph.py`), i.e. **report-scoped claim retrieval**, not a pattern such as interview → … → document section → figure.
 
 **Why keep the graph in the PoC:** **Create Knowledge** still **materialises** a **richer** vertex/edge model for **linkage** and **future** multi-hop or path-style queries; **today**, Tacit-Expert is driven primarily by **vector search + LLM**, with Gremlin **enriching context** with **related claims**.
 
@@ -439,7 +488,7 @@ Gremlin is invoked **on every rag-agent query** that has vector hits carrying `*
 
 **Role in pipeline:**
 
-- **Create Knowledge:** `**vectorizeImage`** (multimodal embedding) for **figure chunks** stored in `**image_vector`**; **Image Analysis** (**caption** + **Read/OCR**) to populate searchable `**content`** and `**content_vector**` for figures alongside **layout-derived headings** from the PDF (`WP3/tasks/embeddings.py`, `knowledge.py`).
+- **Create Knowledge:** `**vectorizeImage`** (multimodal embedding) for **figure chunks** stored in `**image_vector`**; Image Analysis (caption + Read/OCR) to populate searchable `**content`** and `**content_vector**` for figures alongside **layout-derived headings** from the PDF (`WP3/tasks/embeddings.py`, `knowledge.py`).
 - **rag-agent (optional configuration):** `**vectorizeText`** in the **same embedding space** as indexed images for **image-vector** retrieval when the user query is text-only.
 
 **Why it is needed for the PoC:**  
@@ -655,7 +704,7 @@ Action suggestions:
 
 - Gap table + Excel with **claim, label, interview evidence, doc evidence, confidence, actions**.
 - **Reviewed** workflow and optional **Create Knowledge** → search + graph.
-- **Tacit-Expert:** natural language answer + **human-readable source breakdown** (counts by type)—**not** internal Azure Search document ids in the UI; **retrieved document figures** rendered as thumbnails when `**document_image`** chunks are in context and files are available under `**STORAGE_ROOT**`.
+- **Tacit-Expert:** natural language answer + **human-readable source breakdown** (counts by type)—**not** internal Azure Search document ids in the UI; **retrieved document figures** rendered as thumbnails when `**document_image`** chunks are in context and files are available under `**STORAGE_ROOT`**.
 
 ---
 
@@ -699,7 +748,7 @@ Interview audio, transcripts, and internal documents: **confidential** unless pu
 | **Retrieval**                 | **azure-search-documents** (`SearchClient`, `VectorizedQuery` on `content_vector` and `image_vector`)                                                |
 | **Query embeddings**          | **openai** SDK → **Azure OpenAI** (`text-embedding-3-small` or configured deployment)                                                                |
 | **Image query embedding**     | **requests** → **Azure AI Vision** `retrieval:vectorizeText` (aligned with WP3 `embed_image` / `image_vector`)                                       |
-| **Figure files (PoC)**        | `**STORAGE_ROOT`** (env) aligned with WP3 disk layout; `**GET /knowledge-image**` serves `uploads/docs/…/extracted_rpt*.*` with path validation      |
+| **Figure files (PoC)**        | `**STORAGE_ROOT`** (env) aligned with WP3 disk layout; `**GET /knowledge-image`** serves `uploads/docs/…/extracted_rpt*.*` with path validation      |
 | **Graph (standard RAG step)** | **gremlinpython** → Cosmos DB Gremlin; claim lookup by `report_id` after vector merge (no env toggle—empty enrichment if not configured or on error) |
 | **Orchestration (optional)**  | **temporalio** worker + `RAGQueryWorkflow` when `**USE_TEMPORAL=true`**; otherwise same pipeline **in-process** (`asyncio.to_thread`)                |
 | **Deployment**                | **Docker** (typical: single container exposing port 8000)                                                                                            |
@@ -712,6 +761,8 @@ Interview audio, transcripts, and internal documents: **confidential** unless pu
 
 | Version | Notes                                                                                                                                                                                                                                                                 |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.7     | §1.5 SECI + NLI extension methodology (prose; no bundled slide images); document purpose (5)                                                                                                                                                                          |
+| 0.6     | §1.4 methodological workflow (capture → structuring → curation → retrieval); document purpose (4)                                                                                                                                                                     |
 | 0.5     | Architecture-centric §6.1–§6.6 (PoC template); §2.1 canonical pipeline diagram (ingestion → NLI → storage → retrieval); Gremlin as standard post-retrieval step (not optional like Temporal); §1.2, §3.3, §4 step 9, §11.1; §6.5.1 multi-hop vs current Gremlin usage |
 | 0.4     | Figure persistence (`image_storage_key`, disk paths), rag-agent `/knowledge-image` + shared `STORAGE_ROOT`, HLD diagrams/legend and §11.1 updated                                                                                                                     |
 | 0.3     | RAG: multimodal retrieval (text + image vectors), source summary UX, §5.1 chunking + PoC caveat, rag-agent tech stack (§11.1)                                                                                                                                         |
